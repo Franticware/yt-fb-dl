@@ -11,6 +11,10 @@
 #define ID_BUTTON_DOWNLOAD 2
 #define ID_BUTTON_UPDATE 3
 #define IDT_TIMER1 4
+#define ID_CHECKBOX_FLAG 64
+#define ID_CHECKBOX_FFMPEG (5 | ID_CHECKBOX_FLAG)
+#define ID_CHECKBOX_MP4 (6 | ID_CHECKBOX_FLAG)
+
 #define IDI_APP 100
 
 #define STR_ORG "Franticware"
@@ -21,11 +25,12 @@
 
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
-static HWND hwnd;
 static HWND hwndEditUrl;
 static HWND hwndButtonDownload;
 static HWND hwndButtonUpdate;
 static HWND hwndStaticUpdate;
+static HWND hwndCheckboxFfmpeg;
+static HWND hwndCheckboxMp4;
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
@@ -39,7 +44,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.hIcon = LoadIcon(wc.hInstance, MAKEINTRESOURCE(IDI_APP));
 
     RegisterClass(&wc);
-    hwnd = CreateWindow(
+    CreateWindow(
       wc.lpszClassName, TEXT("https://github.com/Franticware/yt-fb-dl"), WS_OVERLAPPEDWINDOW | WS_VISIBLE, 220, 220, 870, 200, 0, 0, hInstance, 0);
 
     while (GetMessage(&msg, NULL, 0, 0))
@@ -50,7 +55,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     return (int)msg.wParam;
 }
 
-static void Update()
+static void Update(HWND hwnd)
 {
     EnableWindow(hwndButtonDownload, false);
     EnableWindow(hwndButtonUpdate, false);
@@ -63,41 +68,48 @@ static void Update()
     HRESULT res = URLDownloadToFile(NULL, TEXT("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_x86.exe"), ytdlpExePath, 0, NULL);
     if (res == S_OK)
     {
-        SetWindowText(hwndStaticUpdate, TEXT("Updating yt-dlp... done. Updating ffmpeg..."));
+        SetWindowText(hwndStaticUpdate, TEXT("Updating yt-dlp... done."));
 
-        TCHAR ffmpegZipPath[MAX_PATH] = {0};
-        GetAppDataPath(ffmpegZipPath, TEXT(STR_ORG), TEXT(STR_APP), TEXT(STR_FILE_FFMPEG_ZIP));
+        TCHAR ffmpegExePath[MAX_PATH] = {0};
+        GetAppDataPath(ffmpegExePath, TEXT(STR_ORG), TEXT(STR_APP), TEXT(STR_FILE_FFMPEG_EXE));
 
-        char ffmpegZipPath8[MAX_PATH8] = {0};
-        pathToUtf8(ffmpegZipPath8, ffmpegZipPath);
-
-        res =
-          URLDownloadToFile(NULL,
-                            TEXT("https://github.com/sudo-nautilus/FFmpeg-Builds-Win32/releases/download/latest/ffmpeg-master-latest-win32-gpl.zip"),
-                            ffmpegZipPath,
-                            0,
-                            NULL);
-
-        if (res == S_OK)
+        if (!IsDlgButtonChecked(hwnd, ID_CHECKBOX_FFMPEG) || !FileExists(ffmpegExePath))
         {
-            struct zip_t* zip = zip_open(ffmpegZipPath8, 0, 'r');
+            SetWindowText(hwndStaticUpdate, TEXT("Updating yt-dlp... done. Updating ffmpeg..."));
+            TCHAR ffmpegZipPath[MAX_PATH] = {0};
+            GetAppDataPath(ffmpegZipPath, TEXT(STR_ORG), TEXT(STR_APP), TEXT(STR_FILE_FFMPEG_ZIP));
+
+            char ffmpegZipPath8[MAX_PATH8] = {0};
+            pathToUtf8(ffmpegZipPath8, ffmpegZipPath);
+
+            res = URLDownloadToFile(
+              NULL,
+              TEXT("https://github.com/sudo-nautilus/FFmpeg-Builds-Win32/releases/download/latest/ffmpeg-master-latest-win32-gpl.zip"),
+              ffmpegZipPath,
+              0,
+              NULL);
+
+            if (res == S_OK)
             {
-                zip_entry_open(zip, "ffmpeg-master-latest-win32-gpl/bin/ffmpeg.exe");
+                struct zip_t* zip = zip_open(ffmpegZipPath8, 0, 'r');
                 {
-                    char ffmpegExePath8[MAX_PATH8] = {0};
-                    GetAppDataPath(ffmpegExePath8, TEXT(STR_ORG), TEXT(STR_APP), TEXT(STR_FILE_FFMPEG_EXE));
+                    zip_entry_open(zip, "ffmpeg-master-latest-win32-gpl/bin/ffmpeg.exe");
+                    {
+                        char ffmpegExePath8[MAX_PATH8] = {0};
+                        pathToUtf8(ffmpegExePath8, ffmpegExePath);
 
-                    zip_entry_fread(zip, ffmpegExePath8);
+                        zip_entry_fread(zip, ffmpegExePath8);
+                    }
+                    zip_entry_close(zip);
                 }
-                zip_entry_close(zip);
-            }
-            zip_close(zip);
+                zip_close(zip);
 
-            SetWindowText(hwndStaticUpdate, TEXT("Updating yt-dlp... done. Updating ffmpeg... done."));
-        }
-        else
-        {
-            SetWindowText(hwndStaticUpdate, TEXT("Updating yt-dlp... done. Updating ffmpeg... ERROR!"));
+                SetWindowText(hwndStaticUpdate, TEXT("Updating yt-dlp... done. Updating ffmpeg... done."));
+            }
+            else
+            {
+                SetWindowText(hwndStaticUpdate, TEXT("Updating yt-dlp... done. Updating ffmpeg... ERROR!"));
+            }
         }
     }
     else
@@ -109,7 +121,7 @@ static void Update()
     EnableWindow(hwndButtonUpdate, true);
 }
 
-static void Download()
+static void Download(HWND hwnd)
 {
     int len = GetWindowTextLength(hwndEditUrl);
     if (len <= 0)
@@ -124,15 +136,6 @@ static void Download()
         char url8[MAX_PATH8] = {0};
         pathToUtf8(url8, url);
 
-        {
-            TCHAR ytdlpExePath[MAX_PATH] = {0};
-            GetAppDataPath(ytdlpExePath, TEXT(STR_ORG), TEXT(STR_APP), TEXT(STR_FILE_YT_DLP_EXE));
-            if (!FileExists(ytdlpExePath))
-            {
-                Update();
-            }
-        }
-
         TCHAR startingFolder[MAX_PATH] = {0};
         if (!SUCCEEDED(SHGetFolderPath(NULL, CSIDL_MYVIDEO | CSIDL_FLAG_CREATE, NULL, 0, startingFolder)))
         {
@@ -141,6 +144,17 @@ static void Download()
         TCHAR outputFolder[MAX_PATH] = {0};
         if (BrowseForFolder(hwnd, outputFolder, TEXT("Select download folder"), startingFolder))
         {
+            {
+                TCHAR ytdlpExePath[MAX_PATH] = {0};
+                GetAppDataPath(ytdlpExePath, TEXT(STR_ORG), TEXT(STR_APP), TEXT(STR_FILE_YT_DLP_EXE));
+                TCHAR ffmpegExePath[MAX_PATH] = {0};
+                GetAppDataPath(ffmpegExePath, TEXT(STR_ORG), TEXT(STR_APP), TEXT(STR_FILE_FFMPEG_EXE));
+                if (!FileExists(ytdlpExePath) || !FileExists(ffmpegExePath))
+                {
+                    Update(hwnd);
+                }
+            }
+
             TCHAR batName[MAX_PATH] = {0};
             DWORD ticks = GetTickCount();
             _snwprintf(batName, MAX_PATH - 1, L"proc%u.bat", ticks);
@@ -151,15 +165,21 @@ static void Download()
             char ytdlpExePath8[MAX_PATH8] = {0};
             GetAppDataPath(ytdlpExePath8, TEXT(STR_ORG), TEXT(STR_APP), TEXT(STR_FILE_YT_DLP_EXE));
 
-            FILE* batFile = _wfopen(batPath, L"wb");
-            fputs("chcp 65001\r\n", batFile);
-            fputs("\"", batFile);
-            fputs(ytdlpExePath8, batFile);
-            fputs("\" --no-colors --restrict-filenames --windows-filenames --trim-filenames 32 ", batFile);
-            fputs(url8, batFile);
-            fputs("\r\n", batFile);
-            fputs("pause\r\n", batFile);
-            fclose(batFile);
+            {
+                FILE* batFile = _wfopen(batPath, L"wb");
+                fputs("chcp 65001\r\n", batFile);
+                fputs("\"", batFile);
+                fputs(ytdlpExePath8, batFile);
+                fputs("\" -U --no-colors --restrict-filenames --windows-filenames --trim-filenames 32 ", batFile);
+                if (IsDlgButtonChecked(hwnd, ID_CHECKBOX_MP4))
+                {
+                    fputs("-f \"bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best\" ", batFile);
+                }
+                fputs(url8, batFile);
+                fputs("\r\n", batFile);
+                fputs("pause\r\n", batFile);
+                fclose(batFile);
+            }
 
             EnableWindow(hwndButtonDownload, false);
             EnableWindow(hwndButtonUpdate, false);
@@ -186,24 +206,53 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     switch (msg)
     {
         case WM_CREATE:
-            hwndEditUrl = CreateWindow(TEXT("Edit"), NULL, WS_CHILD | WS_VISIBLE | WS_BORDER, 90, 43, 750, 26, hwnd, (HMENU)ID_EDIT_URL, NULL, NULL);
-            hwndButtonDownload =
-              CreateWindow(TEXT("button"), TEXT("Download"), WS_VISIBLE | WS_CHILD, 5, 40, 80, 30, hwnd, (HMENU)ID_BUTTON_DOWNLOAD, NULL, NULL);
-            hwndStaticUpdate = CreateWindow(TEXT("Static"), TEXT(""), WS_CHILD | WS_VISIBLE | SS_LEFT, 90, 8, 750, 26, hwnd, (HMENU)1, NULL, NULL);
             hwndButtonUpdate =
               CreateWindow(TEXT("button"), TEXT("Update"), WS_VISIBLE | WS_CHILD, 5, 5, 80, 30, hwnd, (HMENU)ID_BUTTON_UPDATE, NULL, NULL);
+            hwndStaticUpdate = CreateWindow(TEXT("Static"), TEXT(""), WS_CHILD | WS_VISIBLE | SS_LEFT, 90, 8, 750, 26, hwnd, (HMENU)1, NULL, NULL);
+            hwndButtonDownload =
+              CreateWindow(TEXT("button"), TEXT("Download"), WS_VISIBLE | WS_CHILD, 5, 40, 80, 30, hwnd, (HMENU)ID_BUTTON_DOWNLOAD, NULL, NULL);
+            hwndEditUrl = CreateWindow(TEXT("Edit"), NULL, WS_CHILD | WS_VISIBLE | WS_BORDER, 90, 43, 750, 26, hwnd, (HMENU)ID_EDIT_URL, NULL, NULL);
+            hwndCheckboxFfmpeg = CreateWindow(TEXT("button"),
+                                              TEXT("Do not update existing ffmpeg"),
+                                              WS_VISIBLE | WS_CHILD | BS_CHECKBOX,
+                                              5,
+                                              90,
+                                              750,
+                                              26,
+                                              hwnd,
+                                              (HMENU)ID_CHECKBOX_FFMPEG,
+                                              NULL,
+                                              NULL);
+            CheckDlgButton(hwnd, ID_CHECKBOX_FFMPEG, BST_CHECKED);
+            hwndCheckboxMp4 = CreateWindow(
+              TEXT("button"), TEXT("Prefer mp4"), WS_VISIBLE | WS_CHILD | BS_CHECKBOX, 5, 116, 750, 26, hwnd, (HMENU)ID_CHECKBOX_MP4, NULL, NULL);
+            CheckDlgButton(hwnd, ID_CHECKBOX_MP4, BST_UNCHECKED);
             break;
 
         case WM_COMMAND:
             if (HIWORD(wParam) == BN_CLICKED)
             {
-                if (LOWORD(wParam) == ID_BUTTON_UPDATE)
+                const WORD id = LOWORD(wParam);
+                if (id == ID_BUTTON_UPDATE)
                 {
-                    Update();
+                    Update(hwnd);
                 }
-                else if (LOWORD(wParam) == ID_BUTTON_DOWNLOAD)
+                else if (id == ID_BUTTON_DOWNLOAD)
                 {
-                    Download();
+                    Download(hwnd);
+                }
+
+                if (id & ID_CHECKBOX_FLAG)
+                {
+                    BOOL checked = IsDlgButtonChecked(hwnd, id);
+                    if (checked)
+                    {
+                        CheckDlgButton(hwnd, id, BST_UNCHECKED);
+                    }
+                    else
+                    {
+                        CheckDlgButton(hwnd, id, BST_CHECKED);
+                    }
                 }
             }
             break;
