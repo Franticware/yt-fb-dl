@@ -3,6 +3,38 @@
 #include <cstdio>
 #include <shlobj.h>
 
+#include "zip.h"
+
+bool unzipFile(LPCTSTR zipPath, LPCTSTR zippedPath, LPCTSTR outputPath)
+{
+    char zipPath8[MAX_PATH8] = {0};
+    pathToUtf8(zipPath8, zipPath);
+    char zippedPath8[MAX_PATH8] = {0};
+    pathToUtf8(zippedPath8, zippedPath);
+    char outputPath8[MAX_PATH8] = {0};
+    pathToUtf8(outputPath8, outputPath);
+
+    struct zip_t* zip = zip_open(zipPath8, 0, 'r');
+    if (!zip)
+    {
+        return false;
+    }
+    if (zip_entry_open(zip, zippedPath8) != 0)
+    {
+        return false;
+    }
+    if (zip_entry_fread(zip, outputPath8) != 0)
+    {
+        return false;
+    }
+    if (zip_entry_close(zip) != 0)
+    {
+        return false;
+    }
+    zip_close(zip);
+    return true;
+}
+
 bool FileExists(LPCTSTR szPath)
 {
     DWORD dwAttrib = GetFileAttributes(szPath);
